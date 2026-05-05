@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 影像辨識 App</title>
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            margin-top: 0;
+            color: var(--primary-color);
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-bottom: 20px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #webcam-container {
+            margin: 20px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            display: inline-block;
+            border: 3px solid #eee;
+        }
+
+        #label-container {
+            text-align: left;
+            margin-top: 20px;
+        }
+
+        .label-row {
+            display: flex;
+            justify-content: space-between;
+            background: #f9f9f9;
+            margin: 8px 0;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            width: 0%;
+            transition: width 0.1s ease-out;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>影像辨識 App</h1>
+        <p>點擊下方按鈕啟動攝影機並開始辨識</p>
+        <button type="button" onclick="init()">啟動辨識</button>
+        <div id="webcam-container"></div>
+        <div id="label-container"></div>
+    </div>
+
+    <!-- 載入 TensorFlow.js 與 Teachable Machine Image 函式庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    
+    <script type="text/javascript">
+        // 指向存放模型的本地資料夾
+        const URL = "models/";
+
+        let model, webcam, labelContainer, maxPredictions;
+
+        // 載入模型並設定攝影機
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            try {
+                // 載入模型與中繼資料
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+
+                // 設定攝影機參數 (寬度, 高度, 是否翻轉)
+                const flip = true; 
+                webcam = new tmImage.Webcam(300, 300, flip); 
+                await webcam.setup(); // 請求攝影機權限
+                await webcam.play();
+                window.requestAnimationFrame(loop);
+
+                // 將攝影機畫面加入 DOM
+                const webcamContainer = document.getElementById("webcam-container");
+                webcamContainer.innerHTML = ''; // 清空先前的內容
+                webcamContainer.appendChild(webcam.canvas);
+
+                // 初始化標籤與進度條介面
+                labelContainer = document.getElementById("label-container");
+                labelContainer.innerHTML = '';
+                for (let i = 0; i < maxPredictions; i++) {
+                    const row = document.createElement("div");
+                    row.className = "label-row";
+                    
+                    const text = document.createElement("div");
+                    text.id = "text-" + i;
+                    
+                    const barContainer = document.createElement("div");
+                    barContainer.className = "progress-bar";
+                    
+                    const barFill = document.createElement("div");
+                    barFill.className = "progress-fill";
+                    barFill.id = "bar-" + i;
+                    
+                    barContainer.appendChild(barFill);
+                    
+                    const wrapper = document.createElement("div");
+                    wrapper.style.width = "100%";
+                    wrapper.appendChild(text);
+                    wrapper.appendChild(barContainer);
+
+                    row.appendChild(wrapper);
+                    labelContainer.appendChild(row);
+                }
+            } catch (error) {
+                console.error("模型載入失敗：", error);
+                alert("無法載入模型，請確認 model 資料夾與檔案位置是否正確。");
+            }
+        }
+
+        // 持續更新畫面與預測
+        async function loop() {
+            webcam.update(); 
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        // 將影像送入模型進行預測
+        async function predict() {
+            const predictions = await model.predict(webcam.canvas);
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction = predictions[i].className + " : " + (predictions[i].probability * 100).toFixed(1) + "%";
+                document.getElementById("text-" + i).innerHTML = classPrediction;
+                document.getElementById("bar-" + i).style.width = (predictions[i].probability * 100) + "%";
+            }
+        }
+    </script>
+</body>
+</html>
