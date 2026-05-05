@@ -101,29 +101,50 @@
         <h1>影像辨識 App</h1>
         <p>點擊下方按鈕啟動攝影機並開始辨識</p>
         <button type="button" onclick="init()">啟動辨識</button>
+        <div id="status" style="margin-top: 16px; color: #555; font-size: 15px;"></div>
         <div id="webcam-container"></div>
         <div id="label-container"></div>
     </div>
 
     <!-- 載入 TensorFlow.js 與 Teachable Machine Image 函式庫 -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4-alpha/dist/teachablemachine-image.min.js"></script>
     
     <script type="text/javascript">
         // 指向存放模型的本地資料夾
-        const URL = "models/";
+        const URL = "./models/";
 
         let model, webcam, labelContainer, maxPredictions;
+
+        function setStatus(message) {
+            console.log(message);
+            const status = document.getElementById("status");
+            if (status) {
+                status.textContent = message;
+            }
+        }
 
         // 載入模型並設定攝影機
         async function init() {
             const modelURL = URL + "model.json";
             const metadataURL = URL + "metadata.json";
 
+            setStatus("檢查程式庫是否已載入...");
+            if (typeof tmImage === "undefined") {
+                setStatus("錯誤：tmImage 未定義，請確認 Teachable Machine script 已載入。");
+                return;
+            }
+            if (typeof tf === "undefined") {
+                setStatus("錯誤：TensorFlow.js 未定義，請確認 tf.js script 已載入。");
+                return;
+            }
+
             try {
                 // 載入模型與中繼資料
+                setStatus(`讀取模型：${modelURL}，metadata：${metadataURL}`);
                 model = await tmImage.load(modelURL, metadataURL);
                 maxPredictions = model.getTotalClasses();
+                setStatus("模型載入成功，正在啟動攝影機...");
 
                 // 設定攝影機參數 (寬度, 高度, 是否翻轉)
                 const flip = true; 
@@ -166,14 +187,25 @@
                 }
             } catch (error) {
                 console.error("模型載入失敗：", error);
+                setStatus(`模型載入失敗：${error.message || error}`);
                 alert("無法載入模型，請確認 model 資料夾與檔案位置是否正確。");
             }
         }
 
         // 持續更新畫面與預測
         async function loop() {
-            webcam.update(); 
-            await predict();
+            if (!model || !webcam) {
+                setStatus("錯誤：模型或攝影機尚未初始化。");
+                return;
+            }
+            try {
+                webcam.update(); 
+                await predict();
+            } catch (error) {
+                console.error("預測時發生錯誤：", error);
+                setStatus(`預測失敗：${error.message || error}`);
+                return;
+            }
             window.requestAnimationFrame(loop);
         }
 
